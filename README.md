@@ -22,14 +22,17 @@ _Hint:_
 ### Different definition of `length` member of Array in different Solidity versions
 
 - v0.8.0
+
   > Arrays have a `length` member that contains their number of elements. The length of memory arrays is fixed (but dynamic, i.e. it can depend on runtime parameters) once they are created.
-  
+
   _**NOTE:** It is read-only, thus, it cannot be used to resize dynamic arrays._
+
 - v0.5.17
+
   > Arrays have a `length` member that contains their number of elements. The length of memory arrays is fixed (but dynamic, i.e. it can depend on runtime parameters) once they are created. For dynamically-sized arrays (only available for storage), this member can be assigned to resize the array. Accessing elements outside the current length does not automatically resize the array and instead causes a failing assertion. Increasing the length adds new zero-initialised elements to the array. Reducing the length performs an implicit delete on each of the removed elements. If you try to resize a non-dynamic array that isn’t in storage, you receive a `Value must be an lvalue` error.
-  > 
+  >
   > If you use `.length--` on an empty array, it causes an underflow and thus sets the length to `2**256-1`.
-  
+
   _**NOTE:** There is the catch to solve the game. And remember that game is complied v0.5._ 😁
 
 ### Layout of dynamic arrays in storage
@@ -68,7 +71,7 @@ In the sense, we can get `x` in where the slot of `codex[x]` is `0` which is the
 Let's assume that the maximun slots of storage are `10` and `keccak256(bytes32(1))` is `7`.
 
 | slot | variables               | codex       |
-|------|-------------------------|-------------|
+| ---- | ----------------------- | ----------- |
 | 0    | owner                   | codex[3]    |
 | 1    | codex.length (==9)      | codex[4]    |
 | 2    |                         | codex[5]    |
@@ -85,6 +88,7 @@ Now we can get an equation - `x = 10 - 7`.
 So, for real storage, the equation will be `x = 2²⁵⁶ - keccak256(bytes32(p))`, and `codex[x]` will point the slot where `owner` exists. Easy yeah? 🤪
 
 In practice, you should get the index with the Solidity expression like: `2**256 - 1 - uint256(keccak256(bytes32(p))) + 1` instead of `2**256 - uint256(keccak256(bytes32(p)))`, because of compile error for the larger number operand than MAX_UINT256.
+Or `2 ** 256 - 1 - uint256(keccak256(abi.encode(1))) + 1` for Solc v0.5 or higher
 
 ## Source Code
 
@@ -92,25 +96,36 @@ In practice, you should get the index with the Solidity expression like: `2**256
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity ^0.5.0;
 
-contract Token {
-  mapping(address => uint256) balances;
-  uint256 public totalSupply;
+contract AlienCodex {
+  address public owner;
+  bool public contact;
+  bytes32[] public codex;
 
-  constructor(uint256 _initialSupply) public {
-    balances[msg.sender] = totalSupply = _initialSupply;
+  constructor() public {
+    owner = msg.sender;
   }
 
-  function transfer(address _to, uint256 _value) public returns (bool) {
-    require(balances[msg.sender] - _value >= 0);
-    balances[msg.sender] -= _value;
-    balances[_to] += _value;
-    return true;
+  modifier contacted() {
+    assert(contact);
+    _;
   }
 
-  function balanceOf(address _owner) public view returns (uint256 balance) {
-    return balances[_owner];
+  function make_contact() public {
+    contact = true;
+  }
+
+  function record(bytes32 _content) public contacted {
+    codex.push(_content);
+  }
+
+  function retract() public contacted {
+    codex.length--;
+  }
+
+  function revise(uint256 i, bytes32 _content) public contacted {
+    codex[i] = _content;
   }
 }
 
@@ -155,9 +170,9 @@ Compiling your contracts...
 
 
   Contract: Hacker
-    √ should steal countless of tokens (377ms)
+    √ should overwrite the owner (591ms)
 
 
-  1 passing (440ms)
+  1 passing (634ms)
 
 ```
